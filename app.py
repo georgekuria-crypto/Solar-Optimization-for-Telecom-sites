@@ -1,767 +1,765 @@
 # app.py
 
-import streamlit as pd_st
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-# Set page configuration first
+# ── Page config (must be first Streamlit call) ────────────────────────────────
 st.set_page_config(
     page_title="Telecom Solar Sizing Optimizer",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-# Import business logic modules
+# ── Business-logic imports ────────────────────────────────────────────────────
 from src.data_loader import load_and_validate_data
-from src.optimizer import optimize_site, assess_existing_solar, get_justification
-from src.utils import RECTIFIER_LIMITS, TARIFF_KES, PANEL_RATING_KWP, INSTALLED_COST_KES
+from src.optimizer  import optimize_site, assess_existing_solar, get_justification
+from src.utils      import RECTIFIER_LIMITS, TARIFF_KES, PANEL_RATING_KWP, INSTALLED_COST_KES
+from src.report_generator import generate_executive_pdf
 
-# Inject Premium custom styling and fonts
+# ── Premium dark-mode styling ─────────────────────────────────────────────────
 st.markdown("""
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-    /* Global Styles */
-    html, body, [class*="css"] {
-        font-family: 'Outfit', sans-serif;
-    }
-    
-    .stApp {
-        background-color: #0b0f19;
-        color: #f1f5f9;
-    }
-    
-    h1, h2, h3, .title-font {
-        font-family: 'Space Grotesk', sans-serif;
-        font-weight: 700;
-    }
-    
-    /* Gradient headers */
+    html, body, [class*="css"] { font-family: 'Outfit', sans-serif; }
+    .stApp { background-color: #0b0f19; color: #f1f5f9; }
+    h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; font-weight: 700; }
+
     .header-text {
         background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         font-weight: 800;
     }
-    
-    /* Sidebar styling */
+
     section[data-testid="stSidebar"] {
         background-color: #0f172a !important;
         border-right: 1px solid #1e293b;
     }
-    
-    /* Tabs custom styling */
+
     button[data-baseweb="tab"] {
         font-family: 'Space Grotesk', sans-serif;
-        font-size: 1.05rem;
-        font-weight: 500;
+        font-size: 1rem; font-weight: 500;
         color: #94a3b8 !important;
         border-bottom: 2px solid transparent !important;
         background-color: transparent !important;
         transition: all 0.3s ease;
     }
-    
-    button[data-baseweb="tab"]:hover {
-        color: #38bdf8 !important;
-    }
-    
-    button[aria-selected="true"] {
-        color: #38bdf8 !important;
-        border-bottom-color: #38bdf8 !important;
-    }
-    
-    /* Metric Card styling */
-    .metric-card-container {
-        background: linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%);
-        border: 1px solid rgba(255, 255, 255, 0.05);
+    button[data-baseweb="tab"]:hover   { color: #38bdf8 !important; }
+    button[aria-selected="true"]        { color: #38bdf8 !important; border-bottom-color: #38bdf8 !important; }
+
+    .metric-card {
+        background: linear-gradient(135deg, rgba(30,41,59,0.45) 0%, rgba(15,23,42,0.65) 100%);
+        border: 1px solid rgba(255,255,255,0.06);
         border-radius: 16px;
         padding: 1.25rem;
-        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.3);
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 4px 20px -2px rgba(0,0,0,0.35);
+        transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
         margin-bottom: 1rem;
         position: relative;
         overflow: hidden;
     }
-    
-    .metric-card-container:hover {
+    .metric-card:hover {
         transform: translateY(-4px);
-        border-color: rgba(99, 102, 241, 0.4);
-        box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.15);
+        border-color: rgba(99,102,241,0.45);
+        box-shadow: 0 10px 25px -5px rgba(99,102,241,0.18);
     }
-    
-    .metric-card-container::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 4px;
+    .metric-card::before {
+        content: ''; position: absolute; top: 0; left: 0;
+        width: 100%; height: 4px;
         background: linear-gradient(90deg, #38bdf8, #818cf8, #c084fc);
-        opacity: 0.8;
     }
-    
-    /* Status Badge styling */
-    .badge {
-        display: inline-block;
-        padding: 0.25em 0.6em;
-        font-size: 75%;
-        font-weight: 700;
-        line-height: 1;
-        text-align: center;
-        white-space: nowrap;
-        vertical-align: baseline;
-        border-radius: 0.375rem;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }
-    
-    .badge-undersized { background-color: #ef4444; color: #fff; }
-    .badge-adequate { background-color: #f59e0b; color: #fff; }
-    .badge-optimum { background-color: #10b981; color: #fff; }
-    .badge-oversized { background-color: #8b5cf6; color: #fff; }
-    
 </style>
 """, unsafe_allow_html=True)
 
 
-# Custom UI helper functions
-def render_metric_card(title: str, value: str, subtitle: str = "", border_accent: str = "#818cf8"):
+# ── UI helpers ────────────────────────────────────────────────────────────────
+def metric_card(title: str, value: str, subtitle: str = "", accent: str = "#818cf8"):
     st.markdown(f"""
-    <div class="metric-card-container" style="border-left: 4px solid {border_accent};">
-        <div style="font-size: 0.85rem; color: #94a3b8; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em;">{title}</div>
-        <div style="font-size: 1.85rem; font-weight: 700; color: #f8fafc; margin-top: 0.25rem; font-family: 'Space Grotesk', sans-serif;">{value}</div>
-        {f'<div style="font-size: 0.8rem; color: #64748b; margin-top: 0.25rem;">{subtitle}</div>' if subtitle else ''}
-    </div>
-    """, unsafe_allow_html=True)
+    <div class="metric-card" style="border-left:4px solid {accent};">
+        <div style="font-size:0.82rem;color:#94a3b8;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;">{title}</div>
+        <div style="font-size:1.8rem;font-weight:700;color:#f8fafc;margin-top:0.2rem;font-family:'Space Grotesk',sans-serif;">{value}</div>
+        {f'<div style="font-size:0.78rem;color:#64748b;margin-top:0.2rem;">{subtitle}</div>' if subtitle else ''}
+    </div>""", unsafe_allow_html=True)
 
 
-# Load dataset and precompute optimizations
+def status_card(title: str, body: str, color: str):
+    st.markdown(f"""
+    <div style="background:rgba(30,41,59,0.4);border:1px solid {color};border-left:6px solid {color};
+                border-radius:12px;padding:1.4rem;margin-bottom:1.2rem;">
+        <h4 style="margin:0 0 0.6rem;color:{color};font-family:'Space Grotesk',sans-serif;">{title}</h4>
+        <p  style="font-size:0.94rem;line-height:1.55;color:#f1f5f9;margin:0;">{body}</p>
+    </div>""", unsafe_allow_html=True)
+
+
+PLOTLY_BASE = dict(
+    template='plotly_dark',
+    paper_bgcolor='rgba(0,0,0,0)',
+    plot_bgcolor='rgba(0,0,0,0)',
+    font=dict(family='Outfit, sans-serif'),
+)
+
+
+# ── Data loading & optimisation (cached) ──────────────────────────────────────
 @st.cache_data
-def get_dataset_and_results(file_path: str):
+def get_results(file_path: str):
     valid_df, exclusions = load_and_validate_data(file_path)
-    
-    # Precompute optimization results for all valid sites
-    results = []
+
+    rows = []
     for _, row in valid_df.iterrows():
-        rec, _ = optimize_site(row)
-        monthly_energy = row['Revised Average Load'] * 24.0 * 30.0
+        rec, _  = optimize_site(row)
+        monthly_energy = row['Revised Average Load'] * 720.0
         assess = assess_existing_solar(row['PV Capacity (Kw)'], monthly_energy)
-        just = get_justification(row, rec, assess)
-        
-        results.append({
-            'No.': row['No.'],
-            'Site Name': row['Site Name'],
-            'Rectifier Type': row['Rectifier Type'],
-            'Rectifier Capacity': row['Rectifier Capacity'],
-            'PV Capacity (Kw)': row['PV Capacity (Kw)'],
-            'Revised Average Load': row['Revised Average Load'],
-            'Monthly Energy (kWh)': monthly_energy,
-            'Battery Capacity (AH)': row['Battery Capacity (AH)'],
-            'Battery Capacity (kWh)': (row['Battery Capacity (AH)'] * 54.5) / 1000.0,
-            '2026 Average Monthly Bill': row['2026 Average Monthly Bill'],
-            # Optimized values
-            'Recommended Panels Added': rec['panels_added'],
-            'Additional Solar Capacity (kWp)': rec['additional_pv_kwp'],
-            'Total Recommended Capacity (kWp)': rec['total_pv_kwp'],
-            'Rectifier Utilization % (New)': rec['rectifier_utilization'],
-            'CAPEX (KES)': rec['capex_kes'],
-            'Additional Monthly Savings (KES)': rec['additional_monthly_savings_kes'],
-            'Additional Annual Savings (KES)': rec['additional_annual_savings_kes'],
-            'ROI %': rec['roi_pct'],
-            'Payback Period (Years)': rec['payback_years'],
-            'New Monthly Grid Bill (KES)': rec['new_monthly_grid_bill_kes'],
-            'Existing Solar Size Status': assess['category'],
-            'Justification': just
+        just   = get_justification(row, rec, assess)
+
+        # Calculated bill for existing solar (secondary reference)
+        exist_solar_gen    = row['PV Capacity (Kw)'] * 132.0
+        exist_offset       = min(exist_solar_gen, monthly_energy)
+        calc_bill_existing = (monthly_energy - exist_offset) * TARIFF_KES
+
+        rows.append({
+            # ── Site info ────────────────────────────────────────────
+            'No.':                              row['No.'],
+            'Site Name':                        row['Site Name'],
+            'Power Source':                     row['Power_Source'],
+            'Rectifier Type':                   row['Rectifier Type'],
+            'Rectifier Capacity (kWp)':         row['Rectifier Capacity'],
+            'Existing PV Capacity (kWp)':       row['PV Capacity (Kw)'],
+            'Revised Average Load (kW)':        row['Revised Average Load'],
+            'Monthly Energy (kWh)':             monthly_energy,
+            'Battery Capacity (AH)':            row['Battery Capacity (AH)'],
+            'Battery Capacity (kWh)':           (row['Battery Capacity (AH)'] * 54.5) / 1000.0,
+            # ── Bill baseline ────────────────────────────────────────
+            'Actual Monthly Bill (KES)':        row['2026 Average Monthly Bill'],
+            'Calculated Bill – Existing (KES)': calc_bill_existing,    # secondary
+            # ── Optimisation outputs ─────────────────────────────────
+            'Existing Solar Size Status':       assess['category'],
+            'Panels to Add':                    rec['panels_added'],
+            'Additional Solar (kWp)':           rec['additional_pv_kwp'],
+            'Total Recommended PV (kWp)':       rec['total_pv_kwp'],
+            'Rectifier Utilisation % (After)':  rec['rectifier_utilization'],
+            'CAPEX (KES)':                      rec['capex_kes'],
+            # ── Primary savings (vs. actual bill) ────────────────────
+            'Monthly Savings (KES)':            rec['actual_monthly_savings_kes'],
+            'Annual Savings (KES)':             rec['actual_annual_savings_kes'],
+            'New Monthly Bill (KES)':           rec['actual_new_bill_kes'],
+            # ── Financial returns ────────────────────────────────────
+            'ROI %':                            rec['roi_pct'],
+            'Payback Period (Years)':           rec['payback_years'],
+            # ── Secondary (energy-model calculated bill after expansion) ──
+            'Calculated Bill – After Expansion (KES)': rec['calculated_monthly_bill_kes'],
+            # ── Narrative ───────────────────────────────────────────
+            'Justification':                    just,
         })
-        
-    results_df = pd.DataFrame(results)
-    return valid_df, exclusions, results_df
+
+    return valid_df, exclusions, pd.DataFrame(rows)
 
 
-# Load data
 DATA_FILE = "Data/Sensitivity Project 2.0.xlsx"
 try:
-    valid_df, exclusions, results_df = get_dataset_and_results(DATA_FILE)
-except Exception as e:
-    st.error(f"Error loading the spreadsheet data: {str(e)}")
+    valid_df, exclusions, results_df = get_results(DATA_FILE)
+except Exception as exc:
+    st.error(f"❌ Failed to load data: {exc}")
     st.stop()
 
 
-# Sidebar Sizing Controls
-st.sidebar.markdown(f'# <span class="header-text">Settings</span>', unsafe_allow_html=True)
+# ── Sidebar ───────────────────────────────────────────────────────────────────
+st.sidebar.markdown('<h2 class="header-text">Settings</h2>', unsafe_allow_html=True)
 st.sidebar.markdown("---")
-
-st.sidebar.subheader("Engineering Parameter Reference")
-st.sidebar.metric("Electricity Tariff", f"KES {TARIFF_KES:.2f} / kWh")
-st.sidebar.metric("Standard Solar Panel", f"{PANEL_RATING_KWP*1000:.0f} Wp ({PANEL_RATING_KWP:.3f} kWp)")
-st.sidebar.metric("Installed Cost per Panel", f"KES {INSTALLED_COST_KES:,.2f}")
-st.sidebar.metric("Peak Sun Hours (PSH)", f"{5.5} hrs/day")
-st.sidebar.metric("System Efficiency", f"{80:.0f}%")
-
+st.sidebar.subheader("Engineering Parameters")
+st.sidebar.metric("Electricity Tariff",      f"KES {TARIFF_KES:.2f} / kWh")
+st.sidebar.metric("Standard Panel Rating",   f"{PANEL_RATING_KWP*1000:.0f} Wp ({PANEL_RATING_KWP:.3f} kWp)")
+st.sidebar.metric("Installed Cost / Panel",  f"KES {INSTALLED_COST_KES:,.0f}")
+st.sidebar.metric("Peak Sun Hours (PSH)",    "5.5 hrs / day")
+st.sidebar.metric("System Efficiency",       "80%")
 st.sidebar.markdown("---")
-st.sidebar.markdown("💡 **Optimization Rule:** The scenario engine adds panels up to the rectifier capacity or until the site energy load is 100% offset, whichever comes first. This maximizes ROI.")
+st.sidebar.caption(
+    "**Savings are calculated against the actual 2026 Monthly Bill** — "
+    "which already reflects existing solar. "
+    "New-panel savings reduce that bill further."
+)
+
+n_valid    = len(valid_df)
+n_excluded = len(exclusions)
+if n_excluded:
+    st.sidebar.warning(f"⚠️ {n_excluded} site(s) excluded — see Data Quality tab.")
+else:
+    st.sidebar.success(f"✅ All {n_valid} sites passed validation.")
 
 
-# Header Banner
-col1, col2 = st.columns([5, 1])
-with col1:
-    st.markdown(f'# <span class="header-text">Telecom Solar Sizing Optimizer</span>', unsafe_allow_html=True)
-    st.markdown("##### Financially-Driven Solar PV Expansion Strategy & Sizing Platform")
-with col2:
-    st.image("https://img.icons8.com/color/96/solar-panel.png", width=70)
-
+# ── Page header ───────────────────────────────────────────────────────────────
+hc1, hc2 = st.columns([6, 1])
+with hc1:
+    st.markdown('<h1 class="header-text">Telecom Solar Sizing Optimizer</h1>', unsafe_allow_html=True)
+    st.markdown("##### Financially-Driven Solar PV Expansion Platform | Savings vs. Actual 2026 Grid Bill")
 st.markdown("---")
 
-# Main Application Tabs
+# ── Tabs ──────────────────────────────────────────────────────────────────────
 tab_overview, tab_ranking, tab_deepdive, tab_rectifier, tab_validation = st.tabs([
     "📊 Portfolio Overview",
-    "🏆 Sizing Opportunity Sorter",
+    "🏆 Opportunity Ranking",
     "🔍 Site Deep-Dive",
-    "🔌 Rectifier Load Analysis",
-    "📋 Data Quality & Exclusions"
+    "🔌 Rectifier Analysis",
+    "📋 Data Quality",
 ])
 
-# -----------------
-# TAB 1: PORTFOLIO OVERVIEW
-# -----------------
-with tab_overview:
-    st.markdown("### Portfolio Investment Case")
-    
-    # Summaries
-    total_sites = len(results_df)
-    total_capex = results_df['CAPEX (KES)'].sum()
-    total_monthly_savings = results_df['Additional Monthly Savings (KES)'].sum()
-    total_annual_savings = results_df['Additional Annual Savings (KES)'].sum()
-    total_add_capacity = results_df['Additional Solar Capacity (kWp)'].sum()
-    
-    # Portfolio payback
-    portfolio_payback = total_capex / total_annual_savings if total_annual_savings > 0 else 0.0
-    
-    # Existing vs. Recommended Solar Capacities
-    total_existing_solar = results_df['PV Capacity (Kw)'].sum()
-    total_new_solar = results_df['Total Recommended Capacity (kWp)'].sum()
-    
-    # Render Metrics Row
-    m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
-    with m_col1:
-        render_metric_card("Analyzed Sites", f"{total_sites}", "Successfully validated", "#38bdf8")
-    with m_col2:
-        render_metric_card("Total Expansion CAPEX", f"KES {total_capex:,.0f}", f"Across {results_df['Recommended Panels Added'].gt(0).sum()} sites", "#818cf8")
-    with m_col3:
-        render_metric_card("Solar Capacity to Add", f"{total_add_capacity:.2f} kWp", f"Total PV: {total_new_solar:.1f} kWp (+{(total_new_solar/total_existing_solar - 1)*100:.1f}%)", "#a78bfa")
-    with m_col4:
-        render_metric_card("Annual Grid Bill Savings", f"KES {total_annual_savings:,.0f}", f"KES {total_monthly_savings:,.0f} saved / month", "#10b981")
-    with m_col5:
-        render_metric_card("Portfolio Payback Period", f"{portfolio_payback:.2f} Years", f"Average ROI: { (total_annual_savings/total_capex)*100 if total_capex > 0 else 0:.1f}%", "#f59e0b")
-        
-    st.markdown("---")
-    
-    col_chart1, col_chart2 = st.columns(2)
-    
-    with col_chart1:
-        st.markdown("#### Sizing Assessment of Existing Solar Assets")
-        category_counts = results_df['Existing Solar Size Status'].value_counts().reset_index()
-        category_counts.columns = ['Status', 'Count']
-        
-        # Color mapping matching badge colors
-        color_map = {
-            'Under-sized': '#ef4444',
-            'Adequately sized': '#f59e0b',
-            'Near optimum': '#10b981',
-            'Over-sized': '#8b5cf6'
-        }
-        
-        fig_pie = px.pie(
-            category_counts, 
-            values='Count', 
-            names='Status', 
-            color='Status',
-            color_discrete_map=color_map,
-            hole=0.4
-        )
-        fig_pie.update_layout(
-            template='plotly_dark',
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            font=dict(family='Outfit, sans-serif'),
-            legend=dict(orientation="h", y=0, x=0.1)
-        )
-        st.plotly_chart(fig_pie, use_container_width=True)
-        
-    with col_chart2:
-        st.markdown("#### Cumulative Savings vs Cumulative Investment (Top 25 Sites)")
-        # Filter sites with expansion and sort by savings
-        top_investments = results_df[results_df['CAPEX (KES)'] > 0].sort_values(by='Additional Annual Savings (KES)', ascending=False).head(25)
-        
-        top_investments['Cumulative CAPEX'] = top_investments['CAPEX (KES)'].cumsum()
-        top_investments['Cumulative Savings'] = top_investments['Additional Annual Savings (KES)'].cumsum()
-        
-        fig_cum = go.Figure()
-        fig_cum.add_trace(go.Scatter(
-            x=top_investments['Site Name'],
-            y=top_investments['Cumulative Savings'],
-            name='Cumulative Annual Savings (KES)',
-            mode='lines+markers',
-            line=dict(color='#10b981', width=3),
-            marker=dict(size=8)
-        ))
-        fig_cum.add_trace(go.Scatter(
-            x=top_investments['Site Name'],
-            y=top_investments['Cumulative CAPEX'],
-            name='Cumulative CAPEX (KES)',
-            mode='lines+markers',
-            line=dict(color='#818cf8', width=3, dash='dash'),
-            marker=dict(size=8)
-        ))
-        fig_cum.update_layout(
-            template='plotly_dark',
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            font=dict(family='Outfit, sans-serif'),
-            xaxis=dict(tickangle=45),
-            yaxis=dict(title='KES'),
-            legend=dict(orientation="h", y=1.15, x=0.1)
-        )
-        st.plotly_chart(fig_cum, use_container_width=True)
 
-# -----------------
-# TAB 2: OPPORTUNITY RANKING & SORTING
-# -----------------
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 1 – PORTFOLIO OVERVIEW
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab_overview:
+    col_t1, col_t2 = st.columns([4, 1])
+    with col_t1:
+        st.markdown("### Portfolio Investment Case")
+    with col_t2:
+        pdf_bytes = generate_executive_pdf(results_df)
+        st.download_button(
+            label="📄 Download Executive PDF",
+            data=pdf_bytes,
+            file_name=f"Solar_Expansion_Report_{pd.Timestamp.now().strftime('%Y%m%d')}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
+
+    # ── Compute portfolio-level aggregates ────────────────────────────────────
+    total_capex          = results_df['CAPEX (KES)'].sum()
+    total_monthly_sav    = results_df['Monthly Savings (KES)'].sum()
+    total_annual_sav     = results_df['Annual Savings (KES)'].sum()
+    total_add_pv         = results_df['Additional Solar (kWp)'].sum()
+    total_exist_pv       = results_df['Existing PV Capacity (kWp)'].sum()
+    total_new_pv         = results_df['Total Recommended PV (kWp)'].sum()
+    portfolio_payback    = total_capex / total_annual_sav if total_annual_sav > 0 else 0.0
+    portfolio_roi        = (total_annual_sav / total_capex * 100) if total_capex > 0 else 0.0
+    total_actual_bill    = results_df['Actual Monthly Bill (KES)'].sum()
+    total_new_bill       = results_df['New Monthly Bill (KES)'].sum()
+    sites_with_expansion = int(results_df['Panels to Add'].gt(0).sum())
+    total_panels         = int(results_df['Panels to Add'].sum())
+
+    # ── Key metrics row ──────────────────────────────────────────────────────
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1: metric_card("Sites Analysed",          f"{n_valid}",
+                          f"{n_excluded} excluded · {sites_with_expansion} need expansion", "#38bdf8")
+    with c2: metric_card("Total Project CAPEX",     f"KES {total_capex:,.0f}",
+                          f"{total_panels} panels across {sites_with_expansion} sites", "#818cf8")
+    with c3: metric_card("Solar Capacity to Add",   f"{total_add_pv:.1f} kWp",
+                          f"Existing: {total_exist_pv:.1f} → New: {total_new_pv:.1f} kWp", "#a78bfa")
+    with c4: metric_card("Annual Grid Bill Savings", f"KES {total_annual_sav:,.0f}",
+                          f"KES {total_monthly_sav:,.0f} saved / month", "#10b981")
+    with c5: metric_card("Portfolio Payback",        f"{portfolio_payback:.2f} yrs",
+                          f"Portfolio ROI: {portfolio_roi:.1f}%", "#f59e0b")
+
+    st.markdown("---")
+
+    # ── Bill before vs after ─────────────────────────────────────────────────
+    st.markdown("#### Portfolio Grid Bill: Before vs. After Solar Expansion")
+    bc1, bc2, bc3 = st.columns(3)
+    with bc1: metric_card("Current Monthly Bill (All Sites)",
+                           f"KES {total_actual_bill:,.0f}",
+                           "Sum of actual 2026 bills", "#ef4444")
+    with bc2: metric_card("Monthly Savings from Expansion",
+                           f"KES {total_monthly_sav:,.0f}",
+                           f"{total_monthly_sav/total_actual_bill*100:.1f}% bill reduction",
+                           "#10b981")
+    with bc3: metric_card("New Monthly Bill (After Expansion)",
+                           f"KES {total_new_bill:,.0f}",
+                           f"Annual: KES {total_new_bill*12:,.0f}", "#38bdf8")
+
+    st.markdown("---")
+
+    # ── Row of 3 charts ──────────────────────────────────────────────────────
+    ch1, ch2, ch3 = st.columns(3)
+
+    with ch1:
+        st.markdown("#### Existing Solar Sizing Status")
+        cat_counts = results_df['Existing Solar Size Status'].value_counts().reset_index()
+        cat_counts.columns = ['Status', 'Count']
+        colour_map = {
+            'Under-sized': '#ef4444', 'Adequately sized': '#f59e0b',
+            'Near optimum': '#10b981', 'Over-sized': '#8b5cf6',
+        }
+        fig_pie = px.pie(cat_counts, values='Count', names='Status',
+                         color='Status', color_discrete_map=colour_map, hole=0.55)
+        fig_pie.update_traces(
+            textinfo='value+percent', 
+            textfont_size=14,
+            textfont_color='white',
+            hovertemplate="<b>%{label}</b><br>Count: %{value}<br>Percentage: %{percent}<extra></extra>",
+            marker=dict(line=dict(color='#0b0f19', width=2))
+        )
+        fig_pie.update_layout(**PLOTLY_BASE,
+                              legend=dict(orientation="h", y=-0.2, x=0.5, xanchor="center"),
+                              margin=dict(t=20, b=20, l=20, r=20))
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    with ch2:
+        st.markdown("#### Top 15 Sites — Monthly Bill Savings (KES)")
+        top15_sav = (results_df[results_df['Monthly Savings (KES)'] > 0]
+                     .nlargest(15, 'Monthly Savings (KES)'))
+        fig_sav = go.Figure()
+        fig_sav.add_trace(go.Bar(
+            y=top15_sav['Site Name'], x=top15_sav['Monthly Savings (KES)'],
+            orientation='h', 
+            marker=dict(
+                color=top15_sav['Monthly Savings (KES)'],
+                colorscale=['#064e3b', '#10b981', '#34d399'],
+                line=dict(color='rgba(255,255,255,0.1)', width=1)
+            ),
+            text=top15_sav['Monthly Savings (KES)'].apply(lambda v: f"KES {v:,.0f}"),
+            textposition='outside',
+            textfont=dict(color='white'),
+            hovertemplate="<b>%{y}</b><br>Savings: KES %{x:,.0f}<extra></extra>"
+        ))
+        fig_sav.update_layout(**PLOTLY_BASE,
+                              xaxis=dict(title='Monthly Savings (KES)', showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
+                              yaxis=dict(autorange='reversed', showgrid=False),
+                              height=450, margin=dict(l=10, r=90, t=20, b=30),
+                              hovermode="y unified")
+        st.plotly_chart(fig_sav, use_container_width=True)
+
+    with ch3:
+        st.markdown("#### Bill Breakdown by Rectifier Type")
+        rect_bills = results_df.groupby('Rectifier Type').agg(
+            Before=('Actual Monthly Bill (KES)', 'sum'),
+            After=('New Monthly Bill (KES)', 'sum'),
+        ).reset_index()
+        rect_bills['Savings'] = rect_bills['Before'] - rect_bills['After']
+
+        fig_rb = go.Figure()
+        fig_rb.add_trace(go.Bar(name='Current Bill', x=rect_bills['Rectifier Type'],
+                                y=rect_bills['Before'], marker_color='#ef4444',
+                                marker_line=dict(width=1, color='rgba(255,255,255,0.1)'),
+                                hovertemplate="KES %{y:,.0f}"))
+        fig_rb.add_trace(go.Bar(name='New Bill',     x=rect_bills['Rectifier Type'],
+                                y=rect_bills['After'],  marker_color='#38bdf8',
+                                marker_line=dict(width=1, color='rgba(255,255,255,0.1)'),
+                                hovertemplate="KES %{y:,.0f}"))
+        fig_rb.add_trace(go.Bar(name='Savings',      x=rect_bills['Rectifier Type'],
+                                y=rect_bills['Savings'], marker_color='#10b981',
+                                marker_line=dict(width=1, color='rgba(255,255,255,0.1)'),
+                                hovertemplate="KES %{y:,.0f}"))
+        fig_rb.update_layout(**PLOTLY_BASE, barmode='group',
+                              yaxis=dict(title='KES / Month', showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
+                              xaxis=dict(showgrid=False),
+                              legend=dict(orientation="h", y=1.15, x=0.5, xanchor="center"),
+                              height=450, margin=dict(t=30, b=30),
+                              hovermode="x unified")
+        st.plotly_chart(fig_rb, use_container_width=True)
+
+    st.markdown("---")
+
+    # ── Per-site bill comparison (before vs after) ───────────────────────────
+    st.markdown("#### Per-Site Monthly Bill — Before vs. After Expansion")
+    bill_chart_df = (results_df[results_df['Monthly Savings (KES)'] > 0]
+                     .sort_values('Actual Monthly Bill (KES)', ascending=False)
+                     .head(25).copy())
+    fig_bill = go.Figure()
+    fig_bill.add_trace(go.Bar(
+        name='Current Monthly Bill',
+        x=bill_chart_df['Site Name'],
+        y=bill_chart_df['Actual Monthly Bill (KES)'],
+        marker_color='#ef4444',
+        marker_line=dict(width=1, color='rgba(255,255,255,0.1)'),
+        hovertemplate="KES %{y:,.0f}"
+    ))
+    fig_bill.add_trace(go.Bar(
+        name='New Monthly Bill (After Expansion)',
+        x=bill_chart_df['Site Name'],
+        y=bill_chart_df['New Monthly Bill (KES)'],
+        marker_color='#38bdf8',
+        marker_line=dict(width=1, color='rgba(255,255,255,0.1)'),
+        hovertemplate="KES %{y:,.0f}"
+    ))
+    fig_bill.update_layout(**PLOTLY_BASE, barmode='group',
+                            xaxis=dict(tickangle=45, showgrid=False),
+                            yaxis=dict(title='Monthly Bill (KES)', showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
+                            legend=dict(orientation="h", y=1.12, x=0.5, xanchor="center"),
+                            hovermode="x unified",
+                            height=480, margin=dict(t=20, b=20))
+    st.plotly_chart(fig_bill, use_container_width=True)
+
+    # ── ROI Consistency Explanation ──────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("#### ℹ️ Why ROI & Payback Are Consistent Across Most Sites")
+    st.info(
+        "You may notice that ROI (**86.5%**) and Payback (**1.16 years**) are nearly "
+        "identical across most sites. This is **mathematically correct** and expected.\n\n"
+        "**Reason:** Each solar panel has identical marginal economics:\n"
+        f"- Each panel generates: `{PANEL_RATING_KWP} kWp × 132 kWh/kWp/month = "
+        f"{PANEL_RATING_KWP * 132:.1f} kWh/month`\n"
+        f"- Each panel saves: `{PANEL_RATING_KWP * 132:.1f} kWh × KES {TARIFF_KES:.0f} = "
+        f"KES {PANEL_RATING_KWP * 132 * TARIFF_KES:,.2f}/month` "
+        f"(KES {PANEL_RATING_KWP * 132 * TARIFF_KES * 12:,.2f}/year)\n"
+        f"- Each panel costs: `KES {INSTALLED_COST_KES:,.0f}`\n"
+        f"- Per-panel ROI = `{PANEL_RATING_KWP * 132 * TARIFF_KES * 12:,.2f} ÷ {INSTALLED_COST_KES:,.0f} × 100 "
+        f"= {PANEL_RATING_KWP * 132 * TARIFF_KES * 12 / INSTALLED_COST_KES * 100:.1f}%`\n\n"
+        "Since this ratio is **constant per panel**, and since for most sites the new panel "
+        "generation is well below the current grid energy (no saturation cap), every panel "
+        "added has the same marginal return — making the ROI identical regardless of how "
+        "many panels are added.\n\n"
+        "ROI **differs only** when a site's small bill causes the savings cap to activate "
+        "(new generation exceeds current grid purchases), reducing the effective savings per panel."
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 2 – OPPORTUNITY RANKING
+# ═══════════════════════════════════════════════════════════════════════════════
 with tab_ranking:
-    st.markdown("### Sizing Opportunities Ranker")
-    st.markdown("Identify which telecom sites represent the highest potential returns on solar expansion investment.")
-    
-    # Filtering settings
-    rank_col1, rank_col2, rank_col3 = st.columns(3)
-    with rank_col1:
-        sort_by = st.selectbox(
-            "Rank Sites By:",
-            ["Highest Annual Savings (KES)", "Best ROI %", "Fastest Payback (Years)", "Highest CAPEX (KES)"]
-        )
-    with rank_col2:
-        rectifier_filter = st.multiselect(
-            "Filter Rectifier Type:",
-            results_df['Rectifier Type'].unique(),
-            default=results_df['Rectifier Type'].unique()
-        )
-    with rank_col3:
-        status_filter = st.multiselect(
-            "Filter Existing Solar Status:",
-            results_df['Existing Solar Size Status'].unique(),
-            default=results_df['Existing Solar Size Status'].unique()
-        )
-        
-    # Apply filters
-    filtered_df = results_df[
-        results_df['Rectifier Type'].isin(rectifier_filter) &
+    st.markdown("### Solar Expansion Opportunity Ranking")
+    st.markdown(
+        "All savings are calculated against each site's actual **2026 Average Monthly Bill**. "
+        "Differentiate sites by **absolute savings potential** rather than ROI (which is uniform — see Portfolio Overview for explanation)."
+    )
+
+    r1, r2, r3 = st.columns(3)
+    with r1:
+        sort_by = st.selectbox("Rank by:", [
+            "Highest Annual Savings (KES)",
+            "Best ROI %",
+            "Fastest Payback (Years)",
+            "Highest CAPEX (KES)",
+        ])
+    with r2:
+        rect_filter = st.multiselect("Rectifier Type:",
+                                     results_df['Rectifier Type'].unique(),
+                                     default=list(results_df['Rectifier Type'].unique()))
+    with r3:
+        status_filter = st.multiselect("Existing Solar Status:",
+                                       results_df['Existing Solar Size Status'].unique(),
+                                       default=list(results_df['Existing Solar Size Status'].unique()))
+
+    fdf = results_df[
+        results_df['Rectifier Type'].isin(rect_filter) &
         results_df['Existing Solar Size Status'].isin(status_filter)
-    ]
-    
-    # Apply sorting
+    ].copy()
+
     if sort_by == "Highest Annual Savings (KES)":
-        filtered_df = filtered_df.sort_values(by='Additional Annual Savings (KES)', ascending=False)
+        fdf = fdf.sort_values('Annual Savings (KES)', ascending=False)
     elif sort_by == "Best ROI %":
-        filtered_df = filtered_df.sort_values(by='ROI %', ascending=False)
+        fdf = fdf.sort_values('ROI %', ascending=False)
     elif sort_by == "Fastest Payback (Years)":
-        # Put 0 payback (no addition) at the bottom
-        filtered_df['sort_payback'] = filtered_df['Payback Period (Years)'].apply(lambda x: float('inf') if x == 0 else x)
-        filtered_df = filtered_df.sort_values(by='sort_payback', ascending=True).drop(columns=['sort_payback'])
+        fdf['_pb'] = fdf['Payback Period (Years)'].apply(lambda x: float('inf') if x == 0 else x)
+        fdf = fdf.sort_values('_pb').drop(columns=['_pb'])
     elif sort_by == "Highest CAPEX (KES)":
-        filtered_df = filtered_df.sort_values(by='CAPEX (KES)', ascending=False)
-        
-    # Format Table for Presentation
-    display_df = filtered_df[[
-        'Site Name', 'Rectifier Type', 'PV Capacity (Kw)', 'Revised Average Load', 
-        'Existing Solar Size Status', 'Recommended Panels Added', 'Additional Solar Capacity (kWp)',
-        'CAPEX (KES)', 'Additional Monthly Savings (KES)', 'Additional Annual Savings (KES)',
-        'ROI %', 'Payback Period (Years)'
+        fdf = fdf.sort_values('CAPEX (KES)', ascending=False)
+
+    display = fdf[[
+        'Site Name', 'Rectifier Type', 'Existing PV Capacity (kWp)',
+        'Revised Average Load (kW)', 'Existing Solar Size Status',
+        'Actual Monthly Bill (KES)',
+        'Panels to Add', 'Additional Solar (kWp)',
+        'CAPEX (KES)',
+        'Monthly Savings (KES)', 'Annual Savings (KES)',
+        'New Monthly Bill (KES)',
+        'ROI %', 'Payback Period (Years)',
+        'Calculated Bill – After Expansion (KES)',
     ]].copy()
-    
-    # Rename columns for clarity
-    display_df.columns = [
-        'Site Name', 'Rectifier', 'Existing PV (kWp)', 'Avg Load (kW)', 
-        'Existing Solar Status', 'Panels Added', 'Add. Solar (kWp)', 
-        'CAPEX (KES)', 'Monthly Savings (KES)', 'Annual Savings (KES)', 
-        'ROI %', 'Payback (Yrs)'
+
+    display.columns = [
+        'Site', 'Rectifier', 'Exist PV (kWp)', 'Avg Load (kW)', 'Solar Status',
+        'Current Bill (KES)',
+        'Panels +', 'Add Solar (kWp)',
+        'CAPEX (KES)',
+        'Monthly Savings (KES)', 'Annual Savings (KES)',
+        'New Bill (KES)',
+        'ROI %', 'Payback (Yrs)',
+        'Calc Bill After (KES) ⓘ',
     ]
-    
-    # Styling and display
+
     st.dataframe(
-        display_df.style.format({
-            'Existing PV (kWp)': '{:.2f}',
-            'Avg Load (kW)': '{:.2f}',
-            'Add. Solar (kWp)': '{:.2f}',
-            'CAPEX (KES)': '{:,.2f}',
-            'Monthly Savings (KES)': '{:,.2f}',
-            'Annual Savings (KES)': '{:,.2f}',
-            'ROI %': '{:.1f}%',
-            'Payback (Yrs)': '{:.2f}'
+        display.style.format({
+            'Exist PV (kWp)':           '{:.2f}',
+            'Avg Load (kW)':            '{:.2f}',
+            'Add Solar (kWp)':          '{:.3f}',
+            'Current Bill (KES)':       '{:,.2f}',
+            'CAPEX (KES)':              '{:,.2f}',
+            'Monthly Savings (KES)':    '{:,.2f}',
+            'Annual Savings (KES)':     '{:,.2f}',
+            'New Bill (KES)':           '{:,.2f}',
+            'ROI %':                    '{:.1f}%',
+            'Payback (Yrs)':            '{:.2f}',
+            'Calc Bill After (KES) ⓘ': '{:,.2f}',
         }),
         use_container_width=True,
-        hide_index=True
+        hide_index=True,
     )
-    
-    # Download button
-    csv_data = display_df.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        "📥 Download Sizing Expansion Report (CSV)",
-        csv_data,
-        "telecom_solar_expansion_recommendations.csv",
-        "text/csv",
-        key="download-csv"
-    )
+    st.caption("ⓘ *Calc Bill After* is a secondary reference computed from the energy model (Revised Average Load × 720 h). "
+               "The primary savings figure uses the actual 2026 Monthly Bill as baseline.")
 
-# -----------------
-# TAB 3: SITE DEEP DIVE
-# -----------------
+    csv = display.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Download Full Report (CSV)", csv,
+                       "solar_expansion_recommendations.csv", "text/csv",
+                       key="dl-csv")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 3 – SITE DEEP-DIVE
+# ═══════════════════════════════════════════════════════════════════════════════
 with tab_deepdive:
-    st.markdown("### Site-Level Sizing Deep Dive")
-    
-    selected_site = st.selectbox(
-        "Search or Select a Telecom Site:",
-        results_df['Site Name'].sort_values()
-    )
-    
-    # Get rows
-    site_row = valid_df[valid_df['Site Name'] == selected_site].iloc[0]
-    site_res = results_df[results_df['Site Name'] == selected_site].iloc[0]
-    
-    # Get all scenarios
-    recommended, scenarios = optimize_site(site_row)
-    scenarios_df = pd.DataFrame(scenarios)
-    
-    # Technical specs columns
-    tech_col1, tech_col2 = st.columns([1, 1])
-    
-    with tech_col1:
+    st.markdown("### Site-Level Sizing Deep-Dive")
+
+    selected = st.selectbox("Select a Telecom Site:",
+                            sorted(results_df['Site Name'].tolist()))
+
+    site_row  = valid_df[valid_df['Site Name'] == selected].iloc[0]
+    site_res  = results_df[results_df['Site Name'] == selected].iloc[0]
+    rec, scenarios = optimize_site(site_row)
+    scen_df = pd.DataFrame(scenarios)
+
+    dc1, dc2 = st.columns(2)
+
+    # ── Left column: Technical baseline ──────────────────────────────────────
+    with dc1:
         st.markdown("#### Technical & Operational Baseline")
-        specs_data = {
+
+        monthly_energy  = site_row['Revised Average Load'] * 720.0
+        exist_solar_gen = site_row['PV Capacity (Kw)'] * 132.0
+        exist_offset    = min(exist_solar_gen, monthly_energy)
+        calc_bill_exist = (monthly_energy - exist_offset) * TARIFF_KES
+
+        specs = {
             'Parameter': [
-                'Site ID / Serial No.',
+                'Site ID / No.',
                 'Revised Average Load (kW)',
-                'Daily Energy Consumption (kWh/day)',
-                'Monthly Energy Consumption (kWh/month)',
-                'Rectifier Type Installed',
-                'Rectifier Solar Limit (kWp)',
+                'Daily Energy (kWh/day)',
+                'Monthly Energy (kWh/month)',
                 'Existing PV Capacity (kWp)',
-                'Existing Battery Bank Capacity (Ah)',
-                'Existing Battery Capacity (kWh)',
-                'Baseline Monthly Bill (Calculated)'
+                'Rectifier Type',
+                'Rectifier Solar Limit (kWp)',
+                'Battery Bank (Ah)',
+                'Battery Bank (kWh at 54.5V)',
+                '── Bill & Baseline ──',
+                'Actual 2026 Monthly Bill (KES)',
+                'Calculated Bill – Existing Solar (KES)',
             ],
             'Value': [
-                f"{site_row['No.']}",
+                str(site_row['No.']),
                 f"{site_row['Revised Average Load']:.2f} kW",
-                f"{site_row['Revised Average Load'] * 24:.2f} kWh/day",
-                f"{site_row['Revised Average Load'] * 720:.2f} kWh/month",
-                f"{site_row['Rectifier Type']}",
-                f"{RECTIFIER_LIMITS[site_row['Rectifier Type']]:.1f} kWp",
+                f"{site_row['Revised Average Load'] * 24:.2f} kWh",
+                f"{monthly_energy:.2f} kWh",
                 f"{site_row['PV Capacity (Kw)']:.2f} kWp",
+                site_row['Rectifier Type'],
+                f"{RECTIFIER_LIMITS[site_row['Rectifier Type']]:.1f} kWp",
                 f"{site_row['Battery Capacity (AH)']:.0f} Ah",
-                f"{(site_row['Battery Capacity (AH)'] * 54.5)/1000:.2f} kWh (at 54.5V)",
-                f"KES {(site_row['Revised Average Load'] * 720 - min(site_row['PV Capacity (Kw)'] * 132, site_row['Revised Average Load'] * 720)) * TARIFF_KES:,.2f}"
-            ]
+                f"{(site_row['Battery Capacity (AH)'] * 54.5)/1000:.2f} kWh",
+                '',
+                f"KES {site_row['2026 Average Monthly Bill']:,.2f}",
+                f"KES {calc_bill_exist:,.2f}",
+            ],
         }
-        st.table(pd.DataFrame(specs_data))
-        
-    with tech_col2:
+        st.table(pd.DataFrame(specs))
+
+    # ── Right column: Assessment + Recommendation ─────────────────────────────
+    with dc2:
         st.markdown("#### Existing Asset Sizing Assessment")
-        # Display assessment with card style
-        assess = assess_existing_solar(site_row['PV Capacity (Kw)'], site_row['Revised Average Load'] * 720)
-        
-        status_colors = {
-            'Under-sized': '#ef4444',
-            'Adequately sized': '#f59e0b',
-            'Near optimum': '#10b981',
-            'Over-sized': '#8b5cf6',
-        }
-        border_c = status_colors.get(assess['category'], '#818cf8')
-        
-        st.markdown(f"""
-        <div style="
-            background-color: rgba(30, 41, 59, 0.4);
-            border: 1px solid {border_c};
-            border-left: 6px solid {border_c};
-            border-radius: 12px;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-        ">
-            <h4 style="margin-top: 0; color: {border_c}; font-family: 'Space Grotesk', sans-serif;">
-                Status: {assess['category'].upper()}
-            </h4>
-            <p style="font-size: 0.95rem; line-height: 1.5; color: #f1f5f9; margin-bottom: 0;">
-                {assess['justification']}
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-        
+        assess = assess_existing_solar(site_row['PV Capacity (Kw)'], monthly_energy)
+        status_colour = {
+            'Under-sized': '#ef4444', 'Adequately sized': '#f59e0b',
+            'Near optimum': '#10b981', 'Over-sized': '#8b5cf6',
+        }.get(assess['category'], '#818cf8')
+        status_card(f"Status: {assess['category'].upper()}",
+                    assess['justification'], status_colour)
+
         st.markdown("#### Recommended Expansion Decision")
-        rec_panels = site_res['Recommended Panels Added']
-        
-        if rec_panels > 0:
-            st.markdown(f"""
-            <div style="
-                background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(6, 95, 70, 0.2) 100%);
-                border: 1px solid #10b981;
-                border-left: 6px solid #10b981;
-                border-radius: 12px;
-                padding: 1.5rem;
-            ">
-                <h4 style="margin-top: 0; color: #10b981; font-family: 'Space Grotesk', sans-serif;">
-                    APPROVED INVESTMENT PLAN
-                </h4>
-                <p style="font-size: 0.95rem; line-height: 1.5; color: #f1f5f9; margin-bottom: 0;">
-                    {site_res['Justification']}
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+        if site_res['Panels to Add'] > 0:
+            status_card("✅ APPROVED INVESTMENT PLAN",
+                        site_res['Justification'], '#10b981')
         else:
-            st.markdown(f"""
-            <div style="
-                background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(153, 27, 27, 0.2) 100%);
-                border: 1px solid #ef4444;
-                border-left: 6px solid #ef4444;
-                border-radius: 12px;
-                padding: 1.5rem;
-            ">
-                <h4 style="margin-top: 0; color: #ef4444; font-family: 'Space Grotesk', sans-serif;">
-                    EXPANSION NOT VIABLE
-                </h4>
-                <p style="font-size: 0.95rem; line-height: 1.5; color: #f1f5f9; margin-bottom: 0;">
-                    {site_res['Justification']}
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-            
+            status_card("ℹ️ NO EXPANSION RECOMMENDED",
+                        site_res['Justification'], '#94a3b8')
+
+        # Quick summary metrics
+        if site_res['Panels to Add'] > 0:
+            sm1, sm2, sm3 = st.columns(3)
+            with sm1: st.metric("CAPEX",            f"KES {site_res['CAPEX (KES)']:,.0f}")
+            with sm2: st.metric("Monthly Savings",  f"KES {site_res['Monthly Savings (KES)']:,.0f}")
+            with sm3: st.metric("Payback",          f"{site_res['Payback Period (Years)']:.2f} yrs")
+
     st.markdown("---")
-    
-    # Charts for Deep Dive
-    st.markdown("#### Expansion Scenario Evaluation Engine")
-    
-    col_chart_sd1, col_chart_sd2 = st.columns(2)
-    
-    with col_chart_sd1:
-        # Dual axis chart: CAPEX vs Annual Savings
-        fig_sd_cum = make_subplots(specs=[[{"secondary_y": True}]])
-        
-        fig_sd_cum.add_trace(go.Bar(
-            x=scenarios_df['panels_added'],
-            y=scenarios_df['capex_kes'],
-            name='Project CAPEX (KES)',
-            marker_color='#818cf8',
-            opacity=0.8
-        ), secondary_y=False)
-        
-        fig_sd_cum.add_trace(go.Scatter(
-            x=scenarios_df['panels_added'],
-            y=scenarios_df['additional_annual_savings_kes'],
-            name='Additional Annual Savings (KES)',
-            mode='lines+markers',
-            line=dict(color='#10b981', width=3),
-            marker=dict(size=8)
-        ), secondary_y=True)
-        
-        # Add recommended line indicator
-        fig_sd_cum.add_vline(x=recommended['panels_added'], line_width=2, line_dash="dash", line_color="#ef4444")
-        
-        fig_sd_cum.update_layout(
-            title=f"Sizing Curve: CAPEX vs. Savings for {selected_site}",
-            template='plotly_dark',
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            font=dict(family='Outfit, sans-serif'),
-            xaxis=dict(title='Number of Panels Added'),
-            legend=dict(orientation="h", y=1.15, x=0.1)
-        )
-        fig_sd_cum.update_yaxes(title_text="CAPEX (KES)", secondary_y=False)
-        fig_sd_cum.update_yaxes(title_text="Annual Savings (KES)", secondary_y=True)
-        st.plotly_chart(fig_sd_cum, use_container_width=True)
-        st.info("💡 **Observation:** Notice the inflection point. Once solar generation equals the site consumption load, additional panels result in KES 0 additional savings, causing the ROI to drop.")
-        
-    with col_chart_sd2:
-        # ROI and Payback chart
-        # Filter out 0 panels scenario to avoid inf/0 division in payback visualization
-        scenarios_filtered = scenarios_df[scenarios_df['panels_added'] > 0]
-        
-        fig_sd_metrics = make_subplots(specs=[[{"secondary_y": True}]])
-        
-        fig_sd_metrics.add_trace(go.Scatter(
-            x=scenarios_filtered['panels_added'],
-            y=scenarios_filtered['roi_pct'],
-            name='Expansion ROI (%)',
-            mode='lines+markers',
-            line=dict(color='#c084fc', width=3),
-            marker=dict(size=8)
-        ), secondary_y=False)
-        
-        fig_sd_metrics.add_trace(go.Scatter(
-            x=scenarios_filtered['panels_added'],
-            y=scenarios_filtered['payback_years'],
-            name='Expansion Payback (Years)',
-            mode='lines+markers',
-            line=dict(color='#f59e0b', width=3),
-            marker=dict(size=8)
-        ), secondary_y=True)
-        
-        fig_sd_metrics.add_vline(x=recommended['panels_added'], line_width=2, line_dash="dash", line_color="#ef4444")
-        
-        fig_sd_metrics.update_layout(
-            title=f"Financial Returns: ROI & Payback vs. Panels Added for {selected_site}",
-            template='plotly_dark',
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            font=dict(family='Outfit, sans-serif'),
-            xaxis=dict(title='Number of Panels Added'),
-            legend=dict(orientation="h", y=1.15, x=0.1)
-        )
-        fig_sd_metrics.update_yaxes(title_text="ROI (%)", secondary_y=False)
-        fig_sd_metrics.update_yaxes(title_text="Payback Period (Years)", secondary_y=True)
-        st.plotly_chart(fig_sd_metrics, use_container_width=True)
-        
-    # Show full scenario table for transparency
-    st.markdown("#### Scenario Calculation Ledger")
-    st.markdown("All financial calculations are transparent and auditable below:")
-    
-    tbl_df = scenarios_df[[
-        'panels_added', 'additional_pv_kwp', 'total_pv_kwp', 'rectifier_utilization',
-        'monthly_solar_production_kwh', 'solar_contribution_pct', 'capex_kes',
-        'additional_monthly_savings_kes', 'additional_annual_savings_kes',
-        'roi_pct', 'payback_years', 'new_monthly_grid_bill_kes'
+    st.markdown("#### Scenario Evaluation Engine")
+    sc1, sc2 = st.columns(2)
+
+    with sc1:
+        fig_inv = make_subplots(specs=[[{"secondary_y": True}]])
+        fig_inv.add_trace(go.Bar(x=scen_df['panels_added'], y=scen_df['capex_kes'],
+                                 name='CAPEX (KES)', marker_color='#818cf8', opacity=0.75),
+                          secondary_y=False)
+        fig_inv.add_trace(go.Scatter(x=scen_df['panels_added'],
+                                     y=scen_df['actual_annual_savings_kes'],
+                                     name='Annual Savings vs Actual Bill (KES)',
+                                     mode='lines+markers',
+                                     line=dict(color='#10b981', width=3),
+                                     marker=dict(size=7)),
+                          secondary_y=True)
+        fig_inv.add_vline(x=rec['panels_added'], line_dash='dash',
+                          line_color='#ef4444', line_width=2,
+                          annotation_text="Recommended", annotation_position="top right")
+        fig_inv.update_layout(**PLOTLY_BASE,
+                              title=f"CAPEX vs. Annual Savings — {selected}",
+                              xaxis=dict(title='Panels Added'),
+                              legend=dict(orientation="h", y=1.15))
+        fig_inv.update_yaxes(title_text="CAPEX (KES)", secondary_y=False)
+        fig_inv.update_yaxes(title_text="Annual Savings (KES)", secondary_y=True)
+        st.plotly_chart(fig_inv, use_container_width=True)
+
+    with sc2:
+        scen_pos = scen_df[scen_df['panels_added'] > 0]
+        fig_ret = make_subplots(specs=[[{"secondary_y": True}]])
+        fig_ret.add_trace(go.Scatter(x=scen_pos['panels_added'], y=scen_pos['roi_pct'],
+                                     name='ROI %', mode='lines+markers',
+                                     line=dict(color='#c084fc', width=3),
+                                     marker=dict(size=7)),
+                          secondary_y=False)
+        fig_ret.add_trace(go.Scatter(x=scen_pos['panels_added'],
+                                     y=scen_pos['payback_years'],
+                                     name='Payback (Years)', mode='lines+markers',
+                                     line=dict(color='#f59e0b', width=3),
+                                     marker=dict(size=7)),
+                          secondary_y=True)
+        fig_ret.add_vline(x=rec['panels_added'], line_dash='dash',
+                          line_color='#ef4444', line_width=2)
+        fig_ret.update_layout(**PLOTLY_BASE,
+                              title=f"ROI & Payback vs. Panels Added — {selected}",
+                              xaxis=dict(title='Panels Added'),
+                              legend=dict(orientation="h", y=1.15))
+        fig_ret.update_yaxes(title_text="ROI (%)", secondary_y=False)
+        fig_ret.update_yaxes(title_text="Payback (Years)", secondary_y=True)
+        st.plotly_chart(fig_ret, use_container_width=True)
+
+    # ── Full scenario ledger ──────────────────────────────────────────────────
+    st.markdown("#### Full Scenario Calculation Ledger")
+    st.caption("Primary savings are vs. the actual 2026 Monthly Bill. "
+               "Calculated Bill is a secondary energy-model reference.")
+
+    ledger = scen_df[[
+        'panels_added', 'additional_pv_kwp', 'total_pv_kwp',
+        'rectifier_utilization', 'monthly_solar_production_kwh',
+        'solar_contribution_pct',
+        'capex_kes',
+        'actual_monthly_savings_kes', 'actual_annual_savings_kes',
+        'actual_new_bill_kes',
+        'roi_pct', 'payback_years',
+        'calculated_monthly_bill_kes',
     ]].copy()
-    
-    tbl_df.columns = [
-        'Panels Added', 'Add. PV (kWp)', 'Total PV (kWp)', 'Rectifier Util. %',
-        'Solar Gen (kWh/mo)', 'Solar Cont. %', 'CAPEX (KES)',
+
+    ledger.columns = [
+        'Panels +', 'Add PV (kWp)', 'Total PV (kWp)',
+        'Rect Util %', 'Solar Gen (kWh/mo)',
+        'Solar Contrib %',
+        'CAPEX (KES)',
         'Monthly Savings (KES)', 'Annual Savings (KES)',
-        'ROI %', 'Payback (Years)', 'New Grid Bill (KES)'
+        'New Grid Bill (KES)',
+        'ROI %', 'Payback (Yrs)',
+        'Calc Bill – Energy Model (KES)',
     ]
-    
+
     st.dataframe(
-        tbl_df.style.format({
-            'Add. PV (kWp)': '{:.3f}',
-            'Total PV (kWp)': '{:.3f}',
-            'Rectifier Util. %': '{:.1f}%',
-            'Solar Gen (kWh/mo)': '{:,.1f}',
-            'Solar Cont. %': '{:.1f}%',
-            'CAPEX (KES)': '{:,.2f}',
-            'Monthly Savings (KES)': '{:,.2f}',
-            'Annual Savings (KES)': '{:,.2f}',
-            'ROI %': '{:.1f}%',
-            'Payback (Years)': '{:.2f}',
-            'New Grid Bill (KES)': '{:,.2f}'
+        ledger.style.format({
+            'Add PV (kWp)':               '{:.3f}',
+            'Total PV (kWp)':             '{:.3f}',
+            'Rect Util %':                '{:.1f}%',
+            'Solar Gen (kWh/mo)':         '{:,.1f}',
+            'Solar Contrib %':            '{:.1f}%',
+            'CAPEX (KES)':                '{:,.2f}',
+            'Monthly Savings (KES)':      '{:,.2f}',
+            'Annual Savings (KES)':       '{:,.2f}',
+            'New Grid Bill (KES)':        '{:,.2f}',
+            'ROI %':                      '{:.1f}%',
+            'Payback (Yrs)':              '{:.2f}',
+            'Calc Bill – Energy Model (KES)': '{:,.2f}',
         }),
         use_container_width=True,
-        hide_index=True
+        hide_index=True,
     )
 
-# -----------------
-# TAB 4: RECTIFIER INFRASTRUCTURE ANALYSIS
-# -----------------
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 4 – RECTIFIER ANALYSIS
+# ═══════════════════════════════════════════════════════════════════════════════
 with tab_rectifier:
-    st.markdown("### Rectifier Capacity & Headroom Load Analysis")
-    st.markdown("Assess remaining rectifier headroom and how capacity is utilized across rectifier models before and after solar expansion.")
-    
-    # Calculate average utilization by rectifier type
-    rect_summary = results_df.groupby('Rectifier Type').agg(
-        total_sites=('Site Name', 'count'),
-        avg_limit=('Rectifier Capacity', 'mean'),
-        avg_exist_pv=('PV Capacity (Kw)', 'mean'),
-        avg_rec_pv=('Total Recommended Capacity (kWp)', 'mean')
-    ).reset_index()
-    
-    rect_summary['Existing Util %'] = (rect_summary['avg_exist_pv'] / rect_summary['avg_limit']) * 100.0
-    rect_summary['Recommended Util %'] = (rect_summary['avg_rec_pv'] / rect_summary['avg_limit']) * 100.0
-    rect_summary['Available Headroom (kWp)'] = rect_summary['avg_limit'] - rect_summary['avg_rec_pv']
-    
-    col_rect1, col_rect2 = st.columns([2, 1])
-    
-    with col_rect1:
-        st.markdown("#### Rectifier Solar Capacity Sizing Summary")
-        st.dataframe(
-            rect_summary.style.format({
-                'avg_limit': '{:.1f} kWp',
-                'avg_exist_pv': '{:.2f} kWp',
-                'avg_rec_pv': '{:.2f} kWp',
-                'Existing Util %': '{:.1f}%',
-                'Recommended Util %': '{:.1f}%',
-                'Available Headroom (kWp)': '{:.2f} kWp'
-            }),
-            use_container_width=True,
-            hide_index=True
-        )
-        
-    with col_rect2:
-        st.markdown("#### Remaining Headroom Capacity")
-        for idx, r_row in rect_summary.iterrows():
-            st.metric(
-                f"{r_row['Rectifier Type']} Safe Margin",
-                f"{r_row['Available Headroom (kWp)']:.2f} kWp",
-                f"Final Util: {r_row['Recommended Util %']:.1f}%"
-            )
-            
-    st.markdown("---")
-    
-    # Chart showing Rectifier Capacity utilization
-    st.markdown("#### Visual Sizing: Before vs. After Sizing Optimization")
-    
-    fig_rect_util = go.Figure()
-    fig_rect_util.add_trace(go.Bar(
-        x=rect_summary['Rectifier Type'],
-        y=rect_summary['Existing Util %'],
-        name='Existing Rectifier Utilization (%)',
-        marker_color='#ef4444',
-        opacity=0.8
-    ))
-    fig_rect_util.add_trace(go.Bar(
-        x=rect_summary['Rectifier Type'],
-        y=rect_summary['Recommended Util %'],
-        name='Recommended Rectifier Utilization (%)',
-        marker_color='#10b981',
-        opacity=0.8
-    ))
-    fig_rect_util.update_layout(
-        template='plotly_dark',
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(family='Outfit, sans-serif'),
-        yaxis=dict(title='Utilization % (Max 100%)', range=[0, 100]),
-        legend=dict(orientation="h", y=1.15, x=0.1)
-    )
-    st.plotly_chart(fig_rect_util, use_container_width=True)
+    st.markdown("### Rectifier Capacity & Headroom Analysis")
+    st.markdown("Shows how solar capacity utilises each rectifier type, before and after the recommended expansion.")
 
-# -----------------
-# TAB 5: DATA QUALITY & EXCLUSIONS
-# -----------------
-with tab_validation:
-    st.markdown("### Data Quality & Integrity Report")
-    st.markdown("Examine the results of the automated data validation check. All processed rows and exclusions are reported here.")
-    
-    val_col1, val_col2 = st.columns(2)
-    with val_col1:
-        render_metric_card("Total Sites Evaluated", f"{len(valid_df) + len(exclusions)}", "Combined dataset size", "#38bdf8")
-    with val_col2:
-        render_metric_card("Excluded Sites", f"{len(exclusions)}", "Failed quality checks", "#ef4444" if len(exclusions) > 0 else "#10b981")
-        
+    rect_grp = results_df.groupby('Rectifier Type').agg(
+        Sites=('Site Name', 'count'),
+        Limit_kWp=('Rectifier Capacity (kWp)', 'mean'),
+        Exist_PV=('Existing PV Capacity (kWp)', 'mean'),
+        Rec_PV=('Total Recommended PV (kWp)', 'mean'),
+    ).reset_index()
+    rect_grp['Exist Util %']  = (rect_grp['Exist_PV'] / rect_grp['Limit_kWp']) * 100
+    rect_grp['Rec Util %']    = (rect_grp['Rec_PV']   / rect_grp['Limit_kWp']) * 100
+    rect_grp['Headroom (kWp)']= rect_grp['Limit_kWp'] - rect_grp['Rec_PV']
+
+    rg1, rg2 = st.columns([2, 1])
+    with rg1:
+        st.markdown("#### Rectifier Utilisation Summary")
+        st.dataframe(rect_grp.style.format({
+            'Limit_kWp': '{:.1f}', 'Exist_PV': '{:.2f}', 'Rec_PV': '{:.2f}',
+            'Exist Util %': '{:.1f}%', 'Rec Util %': '{:.1f}%',
+            'Headroom (kWp)': '{:.2f}',
+        }), use_container_width=True, hide_index=True)
+    with rg2:
+        st.markdown("#### Remaining Headroom")
+        for _, rr in rect_grp.iterrows():
+            st.metric(f"{rr['Rectifier Type']}",
+                      f"{rr['Headroom (kWp)']:.2f} kWp",
+                      f"After: {rr['Rec Util %']:.1f}% utilisation")
+
     st.markdown("---")
-    
-    if len(exclusions) > 0:
+    fig_rect = go.Figure()
+    fig_rect.add_trace(go.Bar(x=rect_grp['Rectifier Type'],
+                               y=rect_grp['Exist Util %'],
+                               name='Before Expansion',
+                               marker_color='#ef4444', opacity=0.8))
+    fig_rect.add_trace(go.Bar(x=rect_grp['Rectifier Type'],
+                               y=rect_grp['Rec Util %'],
+                               name='After Recommended Expansion',
+                               marker_color='#10b981', opacity=0.8))
+    fig_rect.update_layout(**PLOTLY_BASE,
+                            yaxis=dict(title='Average Utilisation %', range=[0, 100]),
+                            legend=dict(orientation="h", y=1.15))
+    st.plotly_chart(fig_rect, use_container_width=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 5 – DATA QUALITY & EXCLUSIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab_validation:
+    st.markdown("### Data Quality & Exclusion Report")
+    st.markdown("Every site in the source file is accounted for. "
+                "Excluded sites are listed with specific reasons.")
+
+    vc1, vc2, vc3 = st.columns(3)
+    with vc1: metric_card("Total Sites in File",   f"{n_valid + n_excluded}", "Source dataset size", "#38bdf8")
+    with vc2: metric_card("Valid / Processed",     f"{n_valid}", "Passed all quality checks", "#10b981")
+    with vc3: metric_card("Excluded Sites",        f"{n_excluded}",
+                           "Failed one or more checks",
+                           "#ef4444" if n_excluded > 0 else "#10b981")
+
+    st.markdown("---")
+
+    if n_excluded > 0:
         st.markdown("#### Excluded Sites Ledger")
-        st.markdown("The following sites were excluded from the solar optimization engine because of data quality errors. Each row lists a specific reason.")
-        
+        st.info(
+            "Sites are excluded only when critical data is missing or invalid. "
+            "The most common reasons are: **zero 2026 Monthly Bill** "
+            "(no billing baseline for savings calculation) and "
+            "**zero Revised Average Load** (no energy demand to model)."
+        )
         ex_df = pd.DataFrame(exclusions)
-        # Reorder columns for presentation
-        ex_display = ex_df[[
-            'No.', 'Site Name', 'Rectifier Type', 'Rectifier Capacity', 
-            'PV Capacity (Kw)', '2026 Average Monthly Bill', 'Revised Average Load', 'Reason'
-        ]]
-        ex_display.columns = [
-            'No.', 'Site Name', 'Rectifier Type', 'Rectifier Cap (kWp)', 
-            'Exist PV (kWp)', 'Monthly Bill (KES)', 'Revised Load (kW)', 'Exclusion Reason'
+        ex_show = ex_df[[
+            'No.', 'Site Name', 'Rectifier Type', 'Rectifier Capacity',
+            'PV Capacity (Kw)', '2026 Average Monthly Bill',
+            'Revised Average Load', 'Reason',
+        ]].copy()
+        ex_show.columns = [
+            'No.', 'Site Name', 'Rectifier', 'Rect Cap (kWp)',
+            'Exist PV (kWp)', 'Monthly Bill (KES)',
+            'Revised Load (kW)', 'Exclusion Reason',
         ]
-        
-        st.dataframe(ex_display, use_container_width=True, hide_index=True)
+        st.dataframe(ex_show, use_container_width=True, hide_index=True)
     else:
-        st.success("🎉 Excellent! All sites in the dataset passed 100% of the validation and quality checks. Zero sites were excluded.")
+        st.success("🎉 All sites passed validation — zero exclusions.")
