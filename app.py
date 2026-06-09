@@ -198,12 +198,13 @@ with hc1:
 st.markdown("---")
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
-tab_overview, tab_ranking, tab_deepdive, tab_rectifier, tab_validation = st.tabs([
+tab_overview, tab_ranking, tab_deepdive, tab_rectifier, tab_validation, tab_limitations = st.tabs([
     "📊 Portfolio Overview",
     "🏆 Opportunity Ranking",
     "🔍 Site Deep-Dive",
     "🔌 Rectifier Analysis",
     "📋 Data Quality",
+    "⚠️ Model Limitations",
 ])
 
 
@@ -763,3 +764,65 @@ with tab_validation:
         st.dataframe(ex_show, use_container_width=True, hide_index=True)
     else:
         st.success("🎉 All sites passed validation — zero exclusions.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 6 – MODEL LIMITATIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+with tab_limitations:
+    st.markdown("### Engineering & Financial Limitations")
+    st.markdown("While this mathematical model provides robust, conservative estimates for solar ROI, it makes several critical assumptions. Below are the key limitations to be aware of when presenting these figures to stakeholders.")
+
+    st.markdown("---")
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        st.info("**1. Battery Constraints & Wasted Energy**")
+        st.markdown(
+            "The model currently simulates **daytime load offset only**. It does not size or "
+            "calculate the financials for Lithium-Ion battery storage. Therefore, if a solar array generates "
+            "excess power during the day beyond what the site consumes, that energy is mathematically 'spilled' (wasted). "
+            "In reality, adding batteries would capture this energy to offset the night-time grid bill, potentially "
+            "increasing the overall site ROI."
+        )
+
+        st.warning("**2. Reliance on KPLC Bill Accuracy**")
+        st.markdown(
+            "The entire financial baseline relies on the `2026 Average Monthly Bill` column. If KPLC is estimating bills, "
+            "relying on faulty meters, or if there are severe grid outages causing the site to run on diesel generators, "
+            "the actual energy consumed by the site might be much higher than the bill suggests. If the bill is artificially low, "
+            "the model will incorrectly recommend smaller solar arrays."
+        )
+
+        st.error("**3. Fixed Grid Tariffs (No Inflation)**")
+        st.markdown(
+            "The ROI and Payback calculations assume a flat grid tariff of **KES 28/kWh** in perpetuity. "
+            "It does not factor in annual tariff inflation. If KPLC raises prices next year, the true "
+            "savings and ROI of these solar panels will actually be **higher** than what is projected here."
+        )
+
+    with c2:
+        st.info("**4. No Net-Metering**")
+        st.markdown(
+            "The model assumes that it is impossible to sell excess power back to the grid (no net-metering). "
+            "The 'Savings Cap' physically prevents the financial savings from exceeding the current KPLC bill. "
+            "If legislation changes to allow power sales, 'Over-sized' solar sites could become revenue-generating assets."
+        )
+
+        st.warning("**5. Simplified Production Curve**")
+        st.markdown(
+            "Solar generation is calculated using a flat `Peak Sun Hours (PSH)` of 5.5 hours per day, averaged across the year. "
+            "It does not account for hourly production curves, seasonal rainy months, or site-specific shading (trees, buildings). "
+            "A detailed PVsyst simulation is recommended before physical deployment."
+        )
+
+        st.error("**6. Undocumented Site Loads**")
+        st.markdown(
+            "The `Revised Average Load` is used for theoretical engineering checks. However, telecom sites often have "
+            "undocumented loads (security lights, AC units) that draw heavily from the meter. If these loads are present, "
+            "the KPLC bill will be high, but our engineering math might look mismatched. A physical site audit is required to confirm loads."
+        )
+
+    st.markdown("---")
+    st.caption("*Phase 2 Recommendation: Integrate battery autonomy sizing and NPV (Net Present Value) calculations to resolve limitations 1 and 3.*")
