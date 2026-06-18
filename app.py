@@ -5,6 +5,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import re
 
 # ── Page config (must be first Streamlit call) ────────────────────────────────
 st.set_page_config(
@@ -87,11 +88,12 @@ def metric_card(title: str, value: str, subtitle: str = "", accent: str = "#818c
 
 
 def status_card(title: str, body: str, color: str):
+    body_html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', body)
     st.markdown(f"""
     <div style="background:rgba(30,41,59,0.4);border:1px solid {color};border-left:6px solid {color};
                 border-radius:12px;padding:1.4rem;margin-bottom:1.2rem;">
         <h4 style="margin:0 0 0.6rem;color:{color};font-family:'Space Grotesk',sans-serif;">{title}</h4>
-        <p  style="font-size:0.94rem;line-height:1.55;color:#f1f5f9;margin:0;">{body}</p>
+        <p  style="font-size:0.94rem;line-height:1.55;color:#f1f5f9;margin:0;">{body_html}</p>
     </div>""", unsafe_allow_html=True)
 
 
