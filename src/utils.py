@@ -22,8 +22,7 @@ LABOUR_COST_KES = 15000.0
 INSTALLED_COST_KES = PANEL_COST_KES + LABOUR_COST_KES  # 29,500 KES
 
 # Solar Panel Capacity (kWp)
-# 575W per panel is the default, matching the dataset increments
-PANEL_RATING_KWP = 0.575
+# Note: Panel rating is now data-driven and read from the source dataset.
 
 # Battery Voltage (V) for Ah to kWh conversion
 BATTERY_VOLTAGE = 54.5

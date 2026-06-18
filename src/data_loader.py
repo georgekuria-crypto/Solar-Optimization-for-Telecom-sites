@@ -40,7 +40,7 @@ def load_and_validate_data(file_path: str) -> Tuple[pd.DataFrame, List[Dict]]:
     required_cols = [
         'No.', 'Site Name', 'Rectifier Type', 'Rectifier Capacity',
         'PV Capacity (Kw)', 'Battery Capacity (AH)',
-        '2026 Average Monthly Bill', 'Revised Average Load',
+        '2026 Average Monthly Bill', 'Revised Average Load', 'PV Rating'
     ]
     missing_cols = [c for c in required_cols if c not in df.columns]
     if missing_cols:
@@ -55,6 +55,7 @@ def load_and_validate_data(file_path: str) -> Tuple[pd.DataFrame, List[Dict]]:
         raw_rect_cap  = row['Rectifier Capacity']
         raw_pv        = row['PV Capacity (Kw)']
         raw_bat       = row['Battery Capacity (AH)']
+        raw_pv_rating = row.get('PV Rating')
         raw_bill      = row['2026 Average Monthly Bill']
         raw_load      = row['Revised Average Load']
 
@@ -99,6 +100,18 @@ def load_and_validate_data(file_path: str) -> Tuple[pd.DataFrame, List[Dict]]:
         except (ValueError, TypeError):
             reasons.append(f"Non-numeric Battery Capacity: {raw_bat}")
             bat_ah = 0.0
+
+        # ── 5.5 PV Rating ───────────────────────────────────────────────────────
+        try:
+            pv_rating_w = float(raw_pv_rating)
+            if pd.isna(pv_rating_w) or pv_rating_w <= 0:
+                reasons.append(f"Invalid PV Rating: {raw_pv_rating}")
+                pv_rating_kwp = 0.575 # fallback
+            else:
+                pv_rating_kwp = pv_rating_w / 1000.0
+        except (ValueError, TypeError):
+            reasons.append(f"Non-numeric PV Rating: {raw_pv_rating}")
+            pv_rating_kwp = 0.575  # fallback
 
         # ── 6. 2026 Average Monthly Bill (CRITICAL BASELINE) ────────────────────
         # A zero or negative bill means no billing data exists for this site.
@@ -153,6 +166,7 @@ def load_and_validate_data(file_path: str) -> Tuple[pd.DataFrame, List[Dict]]:
                 'Rectifier Type':            raw_rect_type,
                 'Rectifier Capacity':        raw_rect_cap,
                 'PV Capacity (Kw)':          raw_pv,
+                'PV Rating':                 raw_pv_rating,
                 'Battery Capacity (AH)':     raw_bat,
                 '2026 Average Monthly Bill': raw_bill,
                 'Revised Average Load':      raw_load,
@@ -167,6 +181,7 @@ def load_and_validate_data(file_path: str) -> Tuple[pd.DataFrame, List[Dict]]:
                 'Rectifier Type':            rect_type,
                 'Rectifier Capacity':        float(rect_cap),
                 'PV Capacity (Kw)':          float(pv_cap),
+                'Panel Rating (kWp)':        float(pv_rating_kwp),
                 'Battery Capacity (AH)':     float(bat_ah),
                 '2026 Average Monthly Bill': float(monthly_bill),
                 'Revised Average Load':      float(revised_load),

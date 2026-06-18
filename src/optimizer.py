@@ -9,7 +9,6 @@ from src.utils import (
     SYSTEM_EFFICIENCY,
     TARIFF_KES,
     INSTALLED_COST_KES,
-    PANEL_RATING_KWP,
     calculate_monthly_solar_production,
 )
 
@@ -124,15 +123,17 @@ def generate_scenarios(row: pd.Series) -> List[Dict]:
 
     # ── Rectifier headroom ────────────────────────────────────────────────────
     available_headroom = rectifier_cap - pv_exist
+    panel_rating_kwp = row.get('Panel Rating (kWp)', 0.575)
+    
     n_max = (
-        int(math.floor(available_headroom / PANEL_RATING_KWP))
+        int(math.floor(available_headroom / panel_rating_kwp))
         if available_headroom > 0 else 0
     )
 
     scenarios: List[Dict] = []
 
     for n in range(0, n_max + 1):
-        add_pv    = n * PANEL_RATING_KWP
+        add_pv    = n * panel_rating_kwp
         total_pv  = pv_exist + add_pv
         rect_util = (total_pv / rectifier_cap) * 100.0 if rectifier_cap > 0 else 0.0
 

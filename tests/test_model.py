@@ -8,7 +8,6 @@ from src.utils import (
     convert_ah_to_kwh,
     TARIFF_KES,
     INSTALLED_COST_KES,
-    PANEL_RATING_KWP,
 )
 from src.optimizer import assess_existing_solar, generate_scenarios, optimize_site
 from src.data_loader import load_and_validate_data
@@ -50,6 +49,7 @@ class TestSolarModeling(unittest.TestCase):
             'Site Name': 'Test Site',
             'Rectifier Type': 'Eltek',
             'PV Capacity (Kw)': 10.35,
+            'Panel Rating (kWp)': 0.575,
             'Revised Average Load': 5.23,
             'Battery Capacity (AH)': 1000.0,
             '2026 Average Monthly Bill': 105_693.0,
@@ -63,6 +63,7 @@ class TestSolarModeling(unittest.TestCase):
             'Site Name': 'Test Site',
             'Rectifier Type': 'Eltek',
             'PV Capacity (Kw)': 10.35,
+            'Panel Rating (kWp)': 0.575,
             'Revised Average Load': 5.23,
             'Battery Capacity (AH)': 1000.0,
             '2026 Average Monthly Bill': 105_693.0,
@@ -91,6 +92,7 @@ class TestSolarModeling(unittest.TestCase):
             'Site Name': 'Test Site',
             'Rectifier Type': 'Eltek',
             'PV Capacity (Kw)': 10.35,
+            'Panel Rating (kWp)': 0.575,
             'Revised Average Load': 5.23,
             'Battery Capacity (AH)': 1000.0,
             '2026 Average Monthly Bill': 105_693.0,
@@ -113,6 +115,7 @@ class TestSolarModeling(unittest.TestCase):
             'Site Name': 'Test Site',
             'Rectifier Type': 'Eltek',
             'PV Capacity (Kw)': 10.35,
+            'Panel Rating (kWp)': 0.575,
             'Revised Average Load': 5.23,
             'Battery Capacity (AH)': 1000.0,
             '2026 Average Monthly Bill': 105_693.0,
@@ -131,6 +134,7 @@ class TestSolarModeling(unittest.TestCase):
             'Site Name': 'Already-Free Site',
             'Rectifier Type': 'Megmeet',
             'PV Capacity (Kw)': 6.9,
+            'Panel Rating (kWp)': 0.575,
             'Revised Average Load': 1.0,
             'Battery Capacity (AH)': 800.0,
             '2026 Average Monthly Bill': 0.0,

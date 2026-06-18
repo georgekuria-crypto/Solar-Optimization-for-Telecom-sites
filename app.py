@@ -17,7 +17,7 @@ st.set_page_config(
 # ── Business-logic imports ────────────────────────────────────────────────────
 from src.data_loader import load_and_validate_data
 from src.optimizer  import optimize_site, assess_existing_solar, get_justification
-from src.utils      import RECTIFIER_LIMITS, TARIFF_KES, PANEL_RATING_KWP, INSTALLED_COST_KES
+from src.utils      import RECTIFIER_LIMITS, TARIFF_KES, INSTALLED_COST_KES
 from src.report_generator import generate_executive_pdf
 
 # ── Premium dark-mode styling ─────────────────────────────────────────────────
@@ -132,6 +132,7 @@ def get_results(file_path: str):
             'Monthly Energy (kWh)':             monthly_energy,
             'Battery Capacity (AH)':            row['Battery Capacity (AH)'],
             'Battery Capacity (kWh)':           (row['Battery Capacity (AH)'] * 54.5) / 1000.0,
+            'Panel Rating (kWp)':               row.get('Panel Rating (kWp)', 0.575),
             # ── Bill baseline ────────────────────────────────────────
             'Actual Monthly Bill (KES)':        row['2026 Average Monthly Bill'],
             'Calculated Bill – Existing (KES)': calc_bill_existing,    # secondary
@@ -171,7 +172,7 @@ st.sidebar.markdown('<h2 class="header-text">Settings</h2>', unsafe_allow_html=T
 st.sidebar.markdown("---")
 st.sidebar.subheader("Engineering Parameters")
 st.sidebar.metric("Electricity Tariff",      f"KES {TARIFF_KES:.2f} / kWh")
-st.sidebar.metric("Standard Panel Rating",   f"{PANEL_RATING_KWP*1000:.0f} Wp ({PANEL_RATING_KWP:.3f} kWp)")
+st.sidebar.metric("Panel Rating",   "Site-specific (from data)")
 st.sidebar.metric("Installed Cost / Panel",  f"KES {INSTALLED_COST_KES:,.0f}")
 st.sidebar.metric("Peak Sun Hours (PSH)",    "5.5 hrs / day")
 st.sidebar.metric("System Efficiency",       "80%")
@@ -388,14 +389,10 @@ with tab_overview:
         "You may notice that ROI (**86.5%**) and Payback (**1.16 years**) are nearly "
         "identical across most sites. This is **mathematically correct** and expected.\n\n"
         "**Reason:** Each solar panel has identical marginal economics:\n"
-        f"- Each panel generates: `{PANEL_RATING_KWP} kWp × 132 kWh/kWp/month = "
-        f"{PANEL_RATING_KWP * 132:.1f} kWh/month`\n"
-        f"- Each panel saves: `{PANEL_RATING_KWP * 132:.1f} kWh × KES {TARIFF_KES:.0f} = "
-        f"KES {PANEL_RATING_KWP * 132 * TARIFF_KES:,.2f}/month` "
-        f"(KES {PANEL_RATING_KWP * 132 * TARIFF_KES * 12:,.2f}/year)\n"
+        f"- Each panel generates: `Panel kWp × 132 kWh/kWp/month`\n"
+        f"- Each panel saves: `Panel Generation × KES {TARIFF_KES:.0f}/kWh`\n"
         f"- Each panel costs: `KES {INSTALLED_COST_KES:,.0f}`\n"
-        f"- Per-panel ROI = `{PANEL_RATING_KWP * 132 * TARIFF_KES * 12:,.2f} ÷ {INSTALLED_COST_KES:,.0f} × 100 "
-        f"= {PANEL_RATING_KWP * 132 * TARIFF_KES * 12 / INSTALLED_COST_KES * 100:.1f}%`\n\n"
+        f"- Per-panel ROI = `Panel Savings/Year ÷ {INSTALLED_COST_KES:,.0f} × 100`\n\n"
         "Since this ratio is **constant per panel**, and since for most sites the new panel "
         "generation is well below the current grid energy (no saturation cap), every panel "
         "added has the same marginal return — making the ROI identical regardless of how "
